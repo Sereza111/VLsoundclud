@@ -88,21 +88,30 @@ lib/
 
 Сейчас плеер всегда подключает `visualizer_active`. Логику переключения по громкости добавим, когда подключим реальный FFT-стрим.
 
-## Подключение официального SoundCloud API
+## Трек не играет («не отдал поток»)
 
-API закрыт для регистрации с 2016 — заявки рассматривают вручную.
+Это **не обязательно геоблок**. Официальное приложение SoundCloud запрашивает поток с **`track_authorization`** и иногда с сессией пользователя; открытый `client_id` со страницы сайта может не получить URL для части каталога.
 
-1. Зайди на `https://soundcloud.com/you/apps`, заполни форму, дождись одобрения.
-2. Получишь `client_id` и `client_secret`.
-3. Запусти приложение с этими переменными:
+Приложение сначала дергает `soundcloud_explode_dart`, затем резолвер [`soundcloud_stream_resolver.dart`](lib/data/soundcloud/soundcloud_stream_resolver.dart): подставляет **`track_authorization`** из ответа `GET /tracks/:id`.
+
+Если всё равно тишина:
+
+1. Попробуй **другой трек** (особенно не из подписочного каталога SC Go).
+2. Запусти с **`client_id` своего приложения** с [soundcloud.com/you/apps](https://soundcloud.com/you/apps):
 
    ```bash
-   flutter run \
-     --dart-define=SC_CLIENT_ID=твой_id \
-     --dart-define=SC_CLIENT_SECRET=твой_secret
+   flutter run --dart-define=SC_CLIENT_ID=твой_client_id
    ```
 
-4. `soundCloudRepositoryProvider` автоматически переключится с `ExplodeRepository` на `OfficialApiRepository` (его нужно дописать — оставлены TODO с эндпоинтами).
+3. Продвинуто (не светить токен в публичных сборках): **`SC_OAUTH_TOKEN`** из OAuth-сессии — тогда часть «закрытых» потоков может открыться.
+
+Сообщения `Failed to decode advisories` при `pub get` — известный баг совместимости pub.dev и Dart; на установку пакетов не влияют.
+
+## Официальный SoundCloud API (заглушка)
+
+Репозиторий [`OfficialApiRepository`](lib/data/soundcloud/official_repository.dart) пока не реализован — приложение **всегда** использует [`ExplodeRepository`](lib/data/soundcloud/explode_repository.dart). После дописывания OAuth можно снова включить выбор по `Env.hasOfficialCredentials`.
+
+Заявка на ключи: [soundcloud.com/you/apps](https://soundcloud.com/you/apps).
 
 ## Что сейчас работает
 

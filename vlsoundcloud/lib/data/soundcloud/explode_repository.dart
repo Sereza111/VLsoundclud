@@ -1,3 +1,4 @@
+import 'package:http/http.dart' as http;
 import 'package:soundcloud_explode_dart/soundcloud_explode_dart.dart' as sc;
 
 import '../models/sc_playlist.dart';
@@ -6,6 +7,7 @@ import '../models/sc_track.dart';
 import '../models/sc_user.dart';
 import 'soundcloud_http_client.dart';
 import 'soundcloud_repository.dart';
+import 'soundcloud_stream_resolver.dart';
 
 /// SoundCloud data layer powered by `soundcloud_explode_dart`.
 ///
@@ -14,10 +16,19 @@ import 'soundcloud_repository.dart';
 /// the SoundCloud ToS — for production consider migrating to the OAuth-based
 /// [OfficialApiRepository].
 class ExplodeRepository implements SoundCloudRepository {
-  ExplodeRepository({sc.SoundcloudClient? client})
-      : _client = client ??
-            sc.SoundcloudClient(httpClient: createSoundCloudHttpClient());
+  ExplodeRepository._(this._http, this._client);
 
+  /// Один [http.Client] и для пакета, и для резолвера потоков (заголовки +
+  /// `track_authorization`).
+  factory ExplodeRepository() {
+    final httpClient = createSoundCloudHttpClient();
+    return ExplodeRepository._(
+      httpClient,
+      sc.SoundcloudClient(httpClient: httpClient),
+    );
+  }
+
+  final http.Client _http;
   final sc.SoundcloudClient _client;
 
   @override
@@ -57,25 +68,36 @@ class ExplodeRepository implements SoundCloudRepository {
 
   @override
   Future<ScStream> getStream(String trackId) async {
-    final streams = await _client.tracks.getStreams(int.parse(trackId));
-    if (streams.isEmpty) {
-      throw StateError(
-        'SoundCloud не отдал поток для трека $trackId '
-        '(возможны гео-блок, только в приложении SC или временный сбой API). '
-        'Попробуй другой трек или поиск по артисту.',
-      );
+    try {
+      final streams = await _client.tracks.getStreams(int.parse(trackId));
+      if (streams.isNotEmpty) {
+        final pick = _pickBestStream(streams);
+        return ScStream(
+          url: pick.url,
+          format: pick.protocol == 'hls'
+              ? ScStreamFormat.hls
+              : ScStreamFormat.progressive,
+          mimeType: pick.protocol == 'hls'
+              ? 'application/vnd.apple.mpegurl'
+              : 'audio/${pick.container.isEmpty ? 'mpeg' : pick.container}',
+        );
+      }
+    } catch (_) {
+      // Ниже — резолвер с track_authorization.
     }
 
-    final pick = _pickBestStream(streams);
+    final fallback =
+        await SoundcloudStreamResolver(_http).resolvePlaybackUrl(trackId);
+    if (fallback != null) return fallback;
 
-    return ScStream(
-      url: pick.url,
-      format: pick.protocol == 'hls'
-          ? ScStreamFormat.hls
-          : ScStreamFormat.progressive,
-      mimeType: pick.protocol == 'hls'
-          ? 'application/vnd.apple.mpegurl'
-          : 'audio/${pick.container.isEmpty ? 'mpeg' : pick.container}',
+    throw StateError(
+      'Не удалось получить аудио-поток для трека $trackId.\n'
+      'Официальное приложение SoundCloud ходит в API с авторизацией '
+      '(поле track_authorization / OAuth); через открытый client_id часть '
+      'треков недоступна.\n'
+      'Попробуй другой трек или запуск с опциями:\n'
+      '  --dart-define=SC_CLIENT_ID=… (ключ приложения soundcloud.com/you/apps)\n'
+      '  --dart-define=SC_OAUTH_TOKEN=… (сессионный OAuth-токен, продвинуто)',
     );
   }
 
@@ -104,14 +126,8 @@ class ExplodeRepository implements SoundCloudRepository {
 
   @override
   Future<List<ScTrack>> getTrendingTracks({int limit = 30}) async {
-    // The unofficial endpoint has no public "trending" feed, so we proxy a
-    // popular query. UI labels this as «Лента» rather than «Тренды».
     return searchTracks('trending', limit: limit);
   }
-
-  // ---------------------------------------------------------------------------
-  // Mapping helpers
-  // ---------------------------------------------------------------------------
 
   ScTrack _mapTrack(sc.Track t) => ScTrack(
         id: t.id.toString(),
@@ -148,8 +164,6 @@ class ExplodeRepository implements SoundCloudRepository {
         trackCount: p.trackCount.toInt(),
       );
 
-  /// Loose-typed because [sc.MiniUser] is not exported from the package's
-  /// barrel file. We grab the public fields by structural access.
   ScUser _mapMiniUser(dynamic u) => ScUser(
         id: u.id.toString(),
         username: u.username as String,
@@ -159,8 +173,6 @@ class ExplodeRepository implements SoundCloudRepository {
         followerCount: (u.followersCount as num).toInt(),
       );
 
-  /// SoundCloud serves `large` (100x100) artwork by default; bump to t500x500
-  /// so cover art doesn't look pixelated on full-screen player.
   String? _hiResArtwork(String? url) =>
       url?.replaceAll('-large.', '-t500x500.');
 }

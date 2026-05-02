@@ -1,21 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../core/env.dart';
 import '../models/sc_track.dart';
 import 'explode_repository.dart';
-import 'official_repository.dart';
 import 'soundcloud_repository.dart';
 
-/// Single source of truth for repository selection.
+/// Единый репозиторий SoundCloud.
 ///
-/// Falls back to [ExplodeRepository] until official credentials are wired up.
+/// [OfficialApiRepository] пока заглушка: если включить его через флаг при
+/// наличии только `SC_CLIENT_ID`/`SECRET`, сломаются поиск и лента.
+/// Идентификатор приложения из `--dart-define=SC_CLIENT_ID=…` всё равно
+/// используется внутри [ExplodeRepository] / [SoundcloudStreamResolver] для
+/// разрешения потоков.
 final soundCloudRepositoryProvider = Provider<SoundCloudRepository>((ref) {
-  if (Env.hasOfficialCredentials) {
-    return OfficialApiRepository(
-      clientId: Env.soundCloudClientId,
-      clientSecret: Env.soundCloudClientSecret,
-    );
-  }
   return ExplodeRepository();
 });
 

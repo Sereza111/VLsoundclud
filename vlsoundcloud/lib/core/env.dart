@@ -6,6 +6,10 @@
 /// When [soundCloudClientId] is empty the app falls back to the unofficial
 /// scraping repository. The OAuth-backed [OfficialApiRepository] only kicks in
 /// once both values are provided.
+///
+/// Для воспроизведения части треков в подписочном каталоге можно передать
+/// `SC_OAUTH_TOKEN` (Bearer из сессии браузера / официального API) —
+/// см. README.
 class Env {
   Env._();
 
@@ -14,6 +18,11 @@ class Env {
 
   static const String soundCloudClientSecret =
       String.fromEnvironment('SC_CLIENT_SECRET', defaultValue: '');
+
+  /// Опционально: OAuth token пользователя для разрешения потоков,
+  /// которые без логина не отдаются (не публикуй в открытых сборках).
+  static const String soundCloudOAuthToken =
+      String.fromEnvironment('SC_OAUTH_TOKEN', defaultValue: '');
 
   static const String soundCloudRedirectUri = String.fromEnvironment(
     'SC_REDIRECT_URI',
