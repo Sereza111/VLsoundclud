@@ -27,6 +27,7 @@ class _EqPanelState extends ConsumerState<EqPanel> {
 
   AndroidEqualizerParameters? _params;
   bool _enabled = false;
+  bool _unsupportedPlatform = false;
 
   @override
   void initState() {
@@ -36,7 +37,20 @@ class _EqPanelState extends ConsumerState<EqPanel> {
 
   Future<void> _load() async {
     final eq = ref.read(audioControllerProvider).equalizer;
-    final params = await eq.parameters;
+    if (eq == null) {
+      if (!mounted) return;
+      setState(() => _unsupportedPlatform = true);
+      return;
+    }
+
+    late final AndroidEqualizerParameters params;
+    try {
+      params = await eq.parameters;
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _unsupportedPlatform = true);
+      return;
+    }
     final prefs = await SharedPreferences.getInstance();
 
     _enabled = prefs.getBool(_enabledKey) ?? false;
@@ -118,19 +132,35 @@ class _EqPanelState extends ConsumerState<EqPanel> {
                   ),
                 ),
                 const Spacer(),
-                Switch.adaptive(
-                  value: _enabled,
-                  activeThumbColor: AppColors.accent,
-                  onChanged: (v) async {
-                    setState(() => _enabled = v);
-                    await eq.setEnabled(v);
-                    await _persist();
-                  },
-                ),
+                if (eq != null && !_unsupportedPlatform)
+                  Switch.adaptive(
+                    value: _enabled,
+                    activeThumbColor: AppColors.accent,
+                    onChanged: (v) async {
+                      setState(() => _enabled = v);
+                      await eq.setEnabled(v);
+                      await _persist();
+                    },
+                  ),
               ],
             ),
             const SizedBox(height: 8),
-            if (params == null)
+            if (_unsupportedPlatform)
+              const Padding(
+                padding: EdgeInsets.symmetric(vertical: 24),
+                child: Text(
+                  'Системный эквалайзер (полосы bass/mid/treble) встроен только '
+                  'в Android-сборку через ExoPlayer.\n\n'
+                  'На Windows/macOS/iOS используй микшер громкости ОС или собери '
+                  'apk для телефона. Визуал с кубами на экране плеера — отдельно, '
+                  'это WebGL в WebView.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    height: 1.45,
+                  ),
+                ),
+              )
+            else if (params == null)
               const Padding(
                 padding: EdgeInsets.symmetric(vertical: 40),
                 child: Center(

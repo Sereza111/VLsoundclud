@@ -4,6 +4,7 @@ import '../models/sc_playlist.dart';
 import '../models/sc_stream.dart';
 import '../models/sc_track.dart';
 import '../models/sc_user.dart';
+import 'soundcloud_http_client.dart';
 import 'soundcloud_repository.dart';
 
 /// SoundCloud data layer powered by `soundcloud_explode_dart`.
@@ -14,7 +15,8 @@ import 'soundcloud_repository.dart';
 /// [OfficialApiRepository].
 class ExplodeRepository implements SoundCloudRepository {
   ExplodeRepository({sc.SoundcloudClient? client})
-      : _client = client ?? sc.SoundcloudClient();
+      : _client = client ??
+            sc.SoundcloudClient(httpClient: createSoundCloudHttpClient());
 
   final sc.SoundcloudClient _client;
 
@@ -57,12 +59,14 @@ class ExplodeRepository implements SoundCloudRepository {
   Future<ScStream> getStream(String trackId) async {
     final streams = await _client.tracks.getStreams(int.parse(trackId));
     if (streams.isEmpty) {
-      throw StateError('No streams returned for track $trackId');
+      throw StateError(
+        'SoundCloud не отдал поток для трека $trackId '
+        '(возможны гео-блок, только в приложении SC или временный сбой API). '
+        'Попробуй другой трек или поиск по артисту.',
+      );
     }
 
-    // Prefer progressive (gapless, simpler), then high-quality, then anything.
-    final progressive = streams.where((s) => s.protocol == 'progressive');
-    final pick = progressive.isNotEmpty ? progressive.first : streams.first;
+    final pick = _pickBestStream(streams);
 
     return ScStream(
       url: pick.url,
@@ -73,6 +77,29 @@ class ExplodeRepository implements SoundCloudRepository {
           ? 'application/vnd.apple.mpegurl'
           : 'audio/${pick.container.isEmpty ? 'mpeg' : pick.container}',
     );
+  }
+
+  /// Выбираем лучший доступный поток: progressive > hls, полный трек > preview,
+  /// HQ > SQ.
+  sc.StreamInfo _pickBestStream(List<sc.StreamInfo> streams) {
+    int score(sc.StreamInfo s) {
+      var v = 0;
+      if (s.protocol == 'progressive') v += 100;
+      if (s.protocol == 'hls') v += 50;
+      if (!s.isSnipped) v += 40;
+      switch (s.quality) {
+        case sc.Quality.highQuality:
+          v += 20;
+        case sc.Quality.standardQuality:
+          v += 10;
+        case sc.Quality.unknown:
+          v += 0;
+      }
+      return v;
+    }
+
+    final sorted = [...streams]..sort((a, b) => score(b).compareTo(score(a)));
+    return sorted.first;
   }
 
   @override

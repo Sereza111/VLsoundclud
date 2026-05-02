@@ -1,5 +1,7 @@
 import 'dart:async';
+import 'dart:io' show Platform;
 
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:just_audio_background/just_audio_background.dart';
@@ -14,10 +16,16 @@ import '../soundcloud/soundcloud_providers.dart';
 /// the Riverpod providers below — never directly.
 class AudioController {
   AudioController({required this.ref}) {
-    equalizer = AndroidEqualizer();
-    _player = AudioPlayer(
-      audioPipeline: AudioPipeline(androidAudioEffects: [equalizer]),
-    );
+    final useAndroidEq = !kIsWeb && Platform.isAndroid;
+    if (useAndroidEq) {
+      equalizer = AndroidEqualizer();
+      _player = AudioPlayer(
+        audioPipeline: AudioPipeline(androidAudioEffects: [equalizer!]),
+      );
+    } else {
+      equalizer = null;
+      _player = AudioPlayer();
+    }
 
     _player.playbackEventStream.listen(
       (_) {},
@@ -31,7 +39,10 @@ class AudioController {
 
   final Ref ref;
   late final AudioPlayer _player;
-  late final AndroidEqualizer equalizer;
+
+  /// Только Android (см. [AudioPipeline] + ExoPlayer). На Windows/iOS/macOS —
+  /// `null`, эквалайзер в UI отключён.
+  AndroidEqualizer? equalizer;
 
   /// Currently materialised queue (index-aligned with [_player]'s sequence).
   final List<ScTrack> _queue = [];
@@ -80,12 +91,15 @@ class AudioController {
 
     final repo = ref.read(soundCloudRepositoryProvider);
 
-    // Resolve only the first stream eagerly so playback starts fast; the rest
-    // can be resolved on track-change. For the foundation we resolve all up
-    // front so just_audio can drive prev/next out of the box.
+    // Параллельно резолвим все потоки — быстрее, чем по одному await в цикле.
+    final resolved = await Future.wait(
+      tracks.map((t) => repo.getStream(t.id)),
+    );
+
     final sources = <AudioSource>[];
-    for (final t in tracks) {
-      final stream = await repo.getStream(t.id);
+    for (var i = 0; i < tracks.length; i++) {
+      final t = tracks[i];
+      final stream = resolved[i];
       sources.add(
         AudioSource.uri(
           Uri.parse(stream.url),

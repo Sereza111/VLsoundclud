@@ -42,11 +42,24 @@ class HomeScreen extends ConsumerWidget {
                     return TrackTile(
                       track: track,
                       onTap: () async {
-                        await ref
-                            .read(audioControllerProvider)
-                            .setQueue(tracks, startIndex: i);
-                        if (context.mounted) {
-                          context.push(AppRoutes.player);
+                        try {
+                          await ref
+                              .read(audioControllerProvider)
+                              .setQueue(tracks, startIndex: i);
+                          if (context.mounted) {
+                            context.push(AppRoutes.player);
+                          }
+                        } catch (e) {
+                          if (!context.mounted) return;
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Не удалось воспроизвести: $e',
+                                style: const TextStyle(fontSize: 13),
+                              ),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
                         }
                       },
                     );
