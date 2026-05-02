@@ -1,0 +1,28 @@
+# OS
+.DS_Store
+Thumbs.db
+*.log
+
+# Flutter app
+vlsoundcloud/.dart_tool/
+vlsoundcloud/build/
+vlsoundcloud/.flutter-plugins-dependencies
+vlsoundcloud/**/doc/api/
+
+vlsoundcloud/android/.gradle/
+vlsoundcloud/android/**/build/
+vlsoundcloud/android/local.properties
+vlsoundcloud/android/app/debug/
+vlsoundcloud/android/app/profile/
+vlsoundcloud/android/app/release/
+
+vlsoundcloud/ios/Pods/
+vlsoundcloud/ios/.symlinks/
+vlsoundcloud/ios/Flutter/ephemeral/
+
+vlsoundcloud/macos/Flutter/ephemeral/
+vlsoundcloud/linux/flutter/ephemeral/
+vlsoundcloud/windows/flutter/ephemeral/
+
+vlsoundcloud/.idea/
+vlsoundcloud/*.iml

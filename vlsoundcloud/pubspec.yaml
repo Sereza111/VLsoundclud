@@ -1,0 +1,68 @@
+name: vlsoundcloud
+description: "VL SoundCloud - Custom Flutter SoundCloud client with visualizer"
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.10.7
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  cupertino_icons: ^1.0.8
+
+  # Audio playback
+  just_audio: ^0.10.5
+  just_audio_background: ^0.0.1-beta.17
+  audio_session: ^0.2.3
+
+  # State management & navigation
+  flutter_riverpod: ^3.3.1
+  go_router: ^17.2.3
+
+  # Networking & images
+  dio: ^5.9.2
+  cached_network_image: ^3.4.1
+
+  # Storage
+  flutter_secure_storage: ^10.0.0
+  shared_preferences: ^2.5.5
+
+  # Models / serialization
+  freezed_annotation: ^2.4.1
+  json_annotation: ^4.9.0
+
+  # Animation runtimes (Blender hand-off targets)
+  # Blender → FFmpeg `-c:v libvpx-vp9 -pix_fmt yuva420p` → drop into
+  # assets/animations/video/visualizer_active.webm and BlenderArtSlot
+  # auto-picks it up. Rive is omitted from the foundation; add later if
+  # you decide to recreate Blender refs as Rive state machines.
+  video_player: ^2.11.1
+  webview_flutter: ^4.13.1
+
+  # SoundCloud data layer (no API key required)
+  soundcloud_explode_dart: ^1.1.0
+
+  # Real-time FFT visualizer
+  flutter_audio_visualizer: ^0.1.1
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+
+  flutter_lints: ^6.0.0
+  build_runner: ^2.4.13
+  freezed: ^2.5.2
+  json_serializable: ^6.8.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/animations/rive/
+    - assets/animations/video/
+    - assets/animations/sequences/
+    - assets/animations/web/

@@ -1,0 +1,249 @@
+
+<style>
+#wrap{display:flex;gap:0;align-items:flex-start;}
+#c{display:block;width:320px;min-width:320px;height:560px;border-radius:16px;}
+#side{flex:1;padding:0 0 0 16px;display:flex;flex-direction:column;gap:14px;}
+.srow{display:flex;flex-direction:column;gap:4px;}
+.srow label{font-size:12px;color:var(--color-text-secondary);}
+.srow input[type=range]{width:100%;}
+.srow span{font-size:13px;font-weight:500;}
+#bm{font-size:12px;padding:6px 14px;border-radius:8px;border:0.5px solid var(--color-border-secondary);background:transparent;color:var(--color-text-primary);cursor:pointer;width:100%;}
+#bm:hover{background:var(--color-background-secondary);}
+#st{font-size:11px;color:var(--color-text-tertiary);line-height:1.5;}
+</style>
+
+<div id="wrap">
+<canvas id="c"></canvas>
+<div id="side">
+  <button id="bm">Включить микрофон</button>
+  <div class="srow">
+    <label>Волны</label>
+    <input type="range" id="amp" min="1" max="10" value="5" step="1">
+    <span id="ampo">5</span>
+  </div>
+  <div class="srow">
+    <label>Скорость падения</label>
+    <input type="range" id="spd" min="1" max="10" value="4" step="1">
+    <span id="spdo">4</span>
+  </div>
+  <div class="srow">
+    <label>Кол-во кубов</label>
+    <input type="range" id="cnt" min="3" max="9" value="5" step="1">
+    <span id="cnto">5</span>
+  </div>
+  <div id="st">Демо-режим.<br>Нажми кнопку выше для реального аудио.</div>
+</div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+const cv = document.getElementById('c');
+const W = 320, H = 560;
+renderer = new THREE.WebGLRenderer({canvas:cv, antialias:true});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio,2));
+renderer.setSize(W, H);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.5;
+
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x07070d);
+scene.fog = new THREE.Fog(0x07070d, 14, 30);
+
+const camera = new THREE.PerspectiveCamera(60, W/H, 0.1, 80);
+camera.position.set(0, 0, 11);
+camera.lookAt(0, 0, 0);
+
+scene.add(new THREE.AmbientLight(0x1a1a3a, 3));
+
+const kL = new THREE.DirectionalLight(0xaabbff, 2);
+kL.position.set(2, 6, 8); scene.add(kL);
+
+const rimL = new THREE.PointLight(0x4455ff, 5, 30);
+rimL.position.set(-8, 0, 2); scene.add(rimL);
+const rimR = new THREE.PointLight(0x6633aa, 5, 30);
+rimR.position.set(8, 0, 2); scene.add(rimR);
+const topL = new THREE.PointLight(0xffffff, 2.5, 20);
+topL.position.set(0, 10, 4); scene.add(topL);
+const botL = new THREE.PointLight(0x223366, 2, 20);
+botL.position.set(0, -10, 3); scene.add(botL);
+
+const vSh = `
+uniform float uTime;
+uniform float uBass;
+uniform float uMid;
+uniform float uHigh;
+uniform float uAmp;
+varying vec3 vNorm;
+varying vec3 vPos;
+varying vec3 vWorld;
+void main(){
+  vNorm = normalMatrix * normal;
+  vec3 p = position;
+  float wf = 3.8;
+  float bw = sin(p.x*wf + uTime*2.2)*cos(p.y*wf*0.8 + uTime*1.8)*uBass*uAmp*0.20;
+  float mw = sin(p.y*5.5 + uTime*3.8 + p.z*2.5)*uMid*uAmp*0.11;
+  float hw = sin(p.x*10.0+p.y*8.0+uTime*7.0)*uHigh*uAmp*0.05;
+  float rp = sin(length(p.xy)*7.0 - uTime*5.0)*uBass*uAmp*0.13;
+  float mask = smoothstep(-0.55, 0.1, p.y);
+  p += normal*(bw+mw+hw+rp)*mask;
+  vPos = p;
+  vWorld = (modelMatrix*vec4(p,1.0)).xyz;
+  gl_Position = projectionMatrix*modelViewMatrix*vec4(p,1.0);
+}`;
+
+const fSh = `
+uniform float uTime;
+uniform float uBass;
+uniform vec3 uCam;
+varying vec3 vNorm;
+varying vec3 vPos;
+varying vec3 vWorld;
+void main(){
+  vec3 N = normalize(vNorm);
+  vec3 V = normalize(uCam - vWorld);
+  float fr = pow(1.0-max(dot(N,V),0.0), 3.2);
+  float st = sin(vPos.y*7.0+vPos.x*3.5+uTime*1.2)*0.5+0.5;
+  vec3 dark  = vec3(0.06,0.07,0.12);
+  vec3 mid   = vec3(0.72,0.76,0.90);
+  vec3 bright= vec3(0.96,0.97,1.00);
+  vec3 col = mix(dark, mid, st*0.6 + fr*0.5);
+  col = mix(col, bright, fr*0.65);
+  vec3 rim = vec3(0.30,0.40,0.95);
+  col += rim * fr * (0.25 + uBass*0.45);
+  float sp = pow(max(dot(reflect(-V,N),vec3(0.,0.,1.)),0.),50.)*(0.7+uBass*0.5);
+  col += vec3(0.85,0.90,1.0)*sp;
+  float hm = smoothstep(-0.52,0.0,vPos.y);
+  col = mix(col*0.15, col, hm);
+  gl_FragColor = vec4(col,1.0);
+}`;
+
+let cubes=[], NCOLS=5;
+
+function buildCubes(n){
+  cubes.forEach(c=>scene.remove(c.mesh));
+  cubes=[];
+  NCOLS=n;
+  const colW = 8.0/n;
+  for(let col=0;col<n;col++){
+    const size=1.1+Math.random()*0.5;
+    const seg=20;
+    const geo=new THREE.BoxGeometry(size,size,size,seg,seg,seg);
+    const uniforms={
+      uTime:{value:0},uBass:{value:0},uMid:{value:0},
+      uHigh:{value:0},uAmp:{value:5},uCam:{value:camera.position}
+    };
+    const mat=new THREE.ShaderMaterial({vertexShader:vSh,fragmentShader:fSh,uniforms,side:THREE.DoubleSide});
+    const mesh=new THREE.Mesh(geo,mat);
+    const x=(col-(n-1)/2)*colW*1.1;
+    const startY=4+Math.random()*18;
+    mesh.position.set(x+((Math.random()-0.5)*colW*0.3), startY, (Math.random()-0.5)*1.2);
+    mesh.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI*0.3);
+    scene.add(mesh);
+    cubes.push({
+      mesh,uniforms,
+      baseX:x,col,
+      phase:Math.random()*Math.PI*2,
+      rotSpd:new THREE.Vector3((Math.random()-0.5)*0.008,(Math.random()-0.5)*0.012,(Math.random()-0.5)*0.006),
+      fallSpd:0.025+Math.random()*0.025,
+      size,
+      band:Math.floor(Math.random()*3)
+    });
+  }
+}
+
+buildCubes(5);
+
+let analyser=null,dataArray=null,micActive=false,simT=0;
+
+document.getElementById('bm').addEventListener('click',async()=>{
+  if(micActive)return;
+  try{
+    const stream=await navigator.mediaDevices.getUserMedia({audio:true});
+    const ctx=new AudioContext();
+    const src=ctx.createMediaStreamSource(stream);
+    analyser=ctx.createAnalyser();
+    analyser.fftSize=512;
+    dataArray=new Uint8Array(analyser.frequencyBinCount);
+    src.connect(analyser);
+    micActive=true;
+    document.getElementById('bm').textContent='Микрофон активен';
+    document.getElementById('st').textContent='Слушаю — включи музыку рядом с устройством.';
+  }catch(e){
+    document.getElementById('st').textContent='Нет доступа к микрофону. Демо-режим.';
+  }
+});
+
+document.getElementById('amp').addEventListener('input',function(){document.getElementById('ampo').textContent=this.value;});
+document.getElementById('spd').addEventListener('input',function(){document.getElementById('spdo').textContent=this.value;});
+document.getElementById('cnt').addEventListener('input',function(){
+  document.getElementById('cnto').textContent=this.value;
+  buildCubes(parseInt(this.value));
+});
+
+function getBands(){
+  if(micActive&&analyser){
+    analyser.getByteFrequencyData(dataArray);
+    const L=dataArray.length,q=Math.floor(L/4);
+    const avg=(s,e)=>{let r=0;for(let i=s;i<e;i++)r+=dataArray[i];return r/(e-s)/255;};
+    return[avg(0,q),avg(q,q*2),avg(q*2,q*3),avg(q*3,L)];
+  }
+  simT+=0.017;
+  return[
+    0.3+0.45*Math.abs(Math.sin(simT*0.85)),
+    0.2+0.3*Math.abs(Math.sin(simT*2.0+1.3)),
+    0.1+0.18*Math.abs(Math.sin(simT*3.6+2.2)),
+    0.05+0.1*Math.abs(Math.sin(simT*5.5+0.9))
+  ];
+}
+
+const KILL_Y=-9, SPAWN_Y=10;
+let t=0;
+function animate(){
+  requestAnimationFrame(animate);
+  t+=0.016;
+  const bands=getBands();
+  const amp=parseInt(document.getElementById('amp').value);
+  const spd=parseInt(document.getElementById('spd').value)/4;
+
+  rimL.intensity=4+bands[0]*6;
+  rimR.intensity=4+bands[1]*6;
+  rimL.color.setHSL((t*0.025)%1,0.7,0.6);
+  rimR.color.setHSL((t*0.025+0.5)%1,0.7,0.6);
+
+  const colW=8.0/NCOLS;
+
+  cubes.forEach(c=>{
+    const b=bands[c.band];
+    const fv=c.fallSpd*spd*(1+b*1.2);
+    c.mesh.position.y-=fv;
+
+    if(c.mesh.position.y<KILL_Y){
+      c.mesh.position.y=SPAWN_Y+Math.random()*6;
+      c.mesh.position.x=c.baseX+(Math.random()-0.5)*colW*0.3;
+      c.mesh.position.z=(Math.random()-0.5)*1.2;
+      c.mesh.rotation.set(Math.random()*Math.PI,Math.random()*Math.PI,Math.random()*Math.PI*0.3);
+    }
+
+    const wb=Math.sin(t*2.5+c.phase)*0.12*bands[0];
+    c.mesh.position.x=c.baseX+(Math.random()-0.5)*colW*0.3+wb;
+
+    c.mesh.rotation.x+=c.rotSpd.x*(1+b*2);
+    c.mesh.rotation.y+=c.rotSpd.y*(1+b*2);
+    c.mesh.rotation.z+=c.rotSpd.z;
+
+    const sc=1+b*0.2*amp/5;
+    const jx=b*0.08*(amp/5)*Math.sin(t*9+c.phase);
+    c.mesh.scale.set(sc+jx,sc-jx*0.5,sc+jx*0.3);
+
+    c.uniforms.uTime.value=t+c.phase;
+    c.uniforms.uBass.value=bands[0];
+    c.uniforms.uMid.value=bands[1];
+    c.uniforms.uHigh.value=bands[2];
+    c.uniforms.uAmp.value=amp;
+    c.uniforms.uCam.value=camera.position;
+  });
+
+  renderer.render(scene,camera);
+}
+animate();
+</script>
